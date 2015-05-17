@@ -1,0 +1,60 @@
+---
+title: "Predicting Errors in Weight Lifting Form"
+author: "Sir William Wallace"
+date: "Saturday, May 16, 2015"
+output: html_document
+---
+#Data Loading and Pre Processing
+
+First we load the data,
+
+```{r}
+setwd("~/datascience/datasciencecoursera/MachineLearning/Project")
+df <- read.csv(file = "pml-training.csv", na.strings = c("NA",""))
+```
+
+Isolate features with less than 95% missing data. There are several columns with approximately 98% missing data that are unusable. Remove the first 7 columns of the remaining data as these are not applicable features. Another check for missing data reviews that there are no longer any NA values in the data set.
+
+```{r}
+df <- df[,colSums(is.na(df))/nrow(df) < 0.95]
+df <- df[,8:ncol(df)]
+apply(df, 2, function(x) sum(is.na(x)))
+```
+
+Finally, check that features have sufficient variability to be used as predictors
+
+```{r}
+require(caret)
+nearZeroVar(df, saveMetrics=TRUE)
+```
+
+#Building Machine Learning Algorithm
+
+Next we build our classifier by first splitting the data into training (75%) and test (25%) sets. This will allow us to evaluate the predictive accuracy of the classifier on data it was not trained on to get a more realistic estimate of the accuracy.
+
+```{r}
+set.seed(975)
+inTrain = createDataPartition(df$classe, p = 3/4)[[1]]
+training = df[ inTrain,]
+testing = df[-inTrain,]
+```
+
+Next we train a Random Forest on our training data using 10-fold repeated cross validation. This means that the training data will be randomly segmented into 10 folds, and a random forest will be trained on all except one part to allow for the tuning of the number of variables that should be included in the forest. Each fold will be used as a testing data set and this whole process will be repeated 3 times for a total of 30 fitted random forests on our training data. This will allow us to understand the variability in our predictive accuracy that is caused by the randomness in our selected sample. Finally, we can use selected model to predict the classes in our test data set to get an estimate of the out of sample error.
+
+```{r, cache = TRUE}
+control <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+modelrf <- train(training$classe ~ .,method = "rf", data=training, trControl = control)
+modelrf
+```
+
+#Out of Sample Error Estimate
+
+Model accuracy was used to select a tuning parameter of 2, indicating that 2 features would be randomly chosen to be included in each tree of the random forest. The cross-validated accuracy in the training data was 0.993, with a standard deviation of 0.002. Finally we apply the model to the test data set to see how stable our model is on data it hasn't been trained on.
+
+```{r}
+rf <- predict(modelrf,newdata=testing)
+confusionMatrix(rf,testing$classe)
+```
+
+Overall Accuracy on our test data, our esitmate of the out of sample error, is 0.993, which is very close to the training data. The confidence interval for the accuracy is (0.9906, 0.9954). Based on the consistency in the accuracy between the cross validated training sample and test sample error rate, we expect the overall accuracy of our machine learning algorithm to be around 0.99.
+
